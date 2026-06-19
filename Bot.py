@@ -213,7 +213,7 @@ async def check_access(message_or_callback):
         if isinstance(message_or_callback, types.Message):
             await message_or_callback.answer(
                 "📢 Для использования бота подпишитесь на наш канал!\n\n"
-                "👉 [Подписаться](https://t.me/joinchat/AAAAAAAAAAAAAAAAAAAA)\n\n"
+                "👉 [Подписаться](https://t.me/+TAhbj7PhoWhhZTQ6"
                 "После подписки нажмите /start"
             )
         elif isinstance(message_or_callback, types.CallbackQuery):
