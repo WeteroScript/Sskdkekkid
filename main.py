@@ -20,24 +20,19 @@ async def main():
     logger.info("🤖 Бот запущен!")
     logger.info(f"👑 Админы: {ADMIN_IDS}")
     
-    # Регистрируем все обработчики
     register_handlers(dp)
     
     try:
-        # Запускаем фоновые задачи
         business_running = True
         business_check_task = asyncio.create_task(check_business_loop())
         logger.info("🏢 Цикл проверки бизнесов запущен!")
         
-        # Запускаем аукцион
         auction_task = asyncio.create_task(auction_loop())
         logger.info("🔨 Цикл аукциона запущен!")
         
-        # Запускаем проверку ставок
         bid_check_task = asyncio.create_task(check_auction_bids())
         logger.info("💰 Проверка ставок аукциона запущена!")
         
-        # Первое обновление аукциона
         await update_auction()
         logger.info("🔄 Аукцион обновлен!")
         
