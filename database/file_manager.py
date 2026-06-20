@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime
 from config import (
     USERS_FILE, PROMOCODES_FILE, INVENTORY_FILE, 
-    SETTINGS_FILE, BUSINESS_FILE, AUCTION_FILE,
+    SETTINGS_FILE, BUSINESS_FILE,
     DISABLED_FUNCTIONS_FILE, file_locks, logger
 )
 
@@ -154,26 +154,6 @@ async def save_business(business):
                 json.dump(business, f, ensure_ascii=False, indent=4)
         except Exception as e:
             logger.error(f"Ошибка при сохранении business: {e}")
-
-# ========== AUCTION ==========
-async def load_auction():
-    async with file_locks['auction']:
-        try:
-            if os.path.exists(AUCTION_FILE):
-                with open(AUCTION_FILE, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-        except Exception as e:
-            logger.error(f"Ошибка при загрузке auction: {e}")
-        return {"lots": [], "last_update": None}
-
-async def save_auction(auction):
-    async with file_locks['auction']:
-        try:
-            os.makedirs(os.path.dirname(AUCTION_FILE), exist_ok=True)
-            with open(AUCTION_FILE, 'w', encoding='utf-8') as f:
-                json.dump(auction, f, ensure_ascii=False, indent=4)
-        except Exception as e:
-            logger.error(f"Ошибка при сохранении auction: {e}")
 
 # ========== DISABLED FUNCTIONS ==========
 async def load_disabled_functions():
