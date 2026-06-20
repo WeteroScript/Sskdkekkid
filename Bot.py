@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 # ========== КОНФИГУРАЦИЯ ==========
 API_TOKEN = os.getenv('BOT_TOKEN')
-ADMIN_ID = int(os.getenv('ADMIN_ID', '5877790074,1218587495'))
+ADMIN_ID = int(os.getenv('ADMIN_ID', '5877790074'))
 CHANNEL_ID = "-1004461974511"
 PROMO_CHANNEL_ID = "-1003853479476"
 
