@@ -321,37 +321,5 @@ AUCTION_CARS = {
     "Fiat Uno Turbo i.e.": {"stars": 1, "rarity": "Доступная", "base_price": 4500000, "chance": 0.50}
 }
 
-# ========== ID ДЛЯ ФУНКЦИЙ ==========
-FUNCTION_IDS = {
-    # Работы
-    "job_1": "Шахта",
-    "job_2": "Ферма",
-    "job_3": "Трейдинг",
-    "job_4": "Водолаз",
-    
-    # Кнопки меню
-    "menubutton_1": "Работы",
-    "menubutton_2": "Донат",
-    "menubutton_3": "Форбс",
-    "menubutton_4": "Контейнеры",
-    "menubutton_5": "Гараж",
-    "menubutton_6": "Инвентарь",
-    "menubutton_7": "Скупщик",
-    "menubutton_8": "Бизнес",
-    "menubutton_9": "Казино",
-    "menubutton_10": "Статистика",
-    "menubutton_11": "Техподдержка",
-    
-    # Казино
-    "casinogame_1": "Кубик",
-    "casinogame_2": "Слоты",
-    "casinogame_3": "Мины",
-    
-    # Трейдинг
-    "trading_1": "BTC",
-    "trading_2": "WETcoin",
-    "trading_3": "NotCoin",
-}
-
 logger.info(f"📁 Данные хранятся в: {DATA_DIR}")
 logger.info(f"👑 Админы: {ADMIN_IDS}")
