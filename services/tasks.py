@@ -6,10 +6,9 @@ from database.file_manager import (
     load_users, load_settings, save_settings, 
     load_business, save_business, 
     load_inventory, save_inventory, 
-    load_promocodes, save_promocodes,
-    load_auction, save_auction
+    load_promocodes, save_promocodes
 )
-from config import PROMO_CHANNEL_ID, bot, logger, BUSINESS_CONFIG, AUCTION_CARS
+from config import PROMO_CHANNEL_ID, bot, logger, BUSINESS_CONFIG
 
 promo_running = False
 promo_task = None
@@ -113,116 +112,4 @@ async def check_business_loop():
             
         except Exception as e:
             logger.error(f"❌ Ошибка в цикле проверки бизнеса: {e}")
-        await asyncio.sleep(60)
-
-# ========== АУКЦИОН ==========
-async def auction_loop():
-    """Обновление аукциона каждые 30 минут"""
-    while True:
-        try:
-            await update_auction()
-        except Exception as e:
-            logger.error(f"❌ Ошибка в цикле аукциона: {e}")
-        await asyncio.sleep(1800)
-
-async def update_auction():
-    """Обновляет список машин на аукционе"""
-    try:
-        auction = await load_auction()
-        
-        all_cars = list(AUCTION_CARS.keys())
-        selected_cars = []
-        
-        available_cars = all_cars.copy()
-        for _ in range(min(15, len(available_cars))):
-            total_chance = sum(AUCTION_CARS[car]["chance"] for car in available_cars)
-            roll = random.random() * total_chance
-            cumulative = 0
-            selected = None
-            
-            for car in available_cars:
-                cumulative += AUCTION_CARS[car]["chance"]
-                if roll <= cumulative:
-                    selected = car
-                    break
-            
-            if selected:
-                selected_cars.append(selected)
-                available_cars.remove(selected)
-        
-        lots = []
-        for i, car_name in enumerate(selected_cars):
-            car_data = AUCTION_CARS[car_name]
-            start_price = int(car_data["base_price"] * 0.5)
-            lots.append({
-                "id": f"lot_{i+1}",
-                "car_name": car_name,
-                "stars": car_data["stars"],
-                "rarity": car_data["rarity"],
-                "base_price": car_data["base_price"],
-                "start_price": start_price,
-                "current_bid": start_price,
-                "highest_bidder": None,
-                "time_left": 15,
-                "active": True
-            })
-        
-        auction["lots"] = lots
-        auction["last_update"] = datetime.now().isoformat()
-        await save_auction(auction)
-        logger.info(f"🔄 Аукцион обновлен: {len(lots)} лотов")
-        
-    except Exception as e:
-        logger.error(f"❌ Ошибка при обновлении аукциона: {e}")
-        raise
-
-async def check_auction_bids():
-    """Проверяет ставки каждую минуту"""
-    while True:
-        try:
-            auction = await load_auction()
-            users = await load_users()
-            updated = False
-            
-            for lot in auction.get("lots", []):
-                if not lot.get("active", True):
-                    continue
-                
-                lot["time_left"] -= 1
-                
-                if lot["time_left"] <= 0 and lot.get("highest_bidder"):
-                    bidder_id = lot["highest_bidder"]
-                    if bidder_id in users:
-                        if "inventory" not in users[bidder_id]:
-                            users[bidder_id]["inventory"] = []
-                        
-                        users[bidder_id]["inventory"].append({
-                            "name": lot["car_name"],
-                            "price": lot["base_price"],
-                            "from_auction": True
-                        })
-                        
-                        users[bidder_id]["money"] -= lot["current_bid"]
-                        await save_users(users)
-                        
-                        try:
-                            await bot.send_message(
-                                int(bidder_id),
-                                f"🎉 Вы выиграли аукцион!\n"
-                                f"🚗 {lot['car_name']}\n"
-                                f"💰 Ставка: {lot['current_bid']:,.0f}₽\n"
-                                f"⭐ Редкость: {'⭐' * lot['stars']} ({lot['rarity']})"
-                            )
-                        except Exception as e:
-                            logger.warning(f"Не удалось уведомить {bidder_id}: {e}")
-                    
-                    lot["active"] = False
-                    updated = True
-            
-            if updated:
-                await save_auction(auction)
-                
-        except Exception as e:
-            logger.error(f"❌ Ошибка в check_auction_bids: {e}")
-        
         await asyncio.sleep(60)
