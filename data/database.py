@@ -1,74 +1,114 @@
 import json
 import asyncio
 import os
-from config import Config
 
-class Database:
-    def __init__(self):
-        self.locks = {
-            'users': asyncio.Lock(),
-            'promocodes': asyncio.Lock(),
-            'inventory': asyncio.Lock(),
-            'settings': asyncio.Lock(),
-            'business': asyncio.Lock()
-        }
-        os.makedirs(Config.DATA_DIR, exist_ok=True)
-    
-    async def load_json(self, filename, default=None):
-        filepath = os.path.join(Config.DATA_DIR, filename)
-        async with self.locks[filename.split('.')[0]]:
-            try:
-                if os.path.exists(filepath):
-                    with open(filepath, 'r', encoding='utf-8') as f:
-                        return json.load(f)
-            except json.JSONDecodeError:
-                # Создаем бэкап
-                if os.path.exists(filepath):
-                    os.rename(filepath, f"{filepath}.backup")
-            except Exception as e:
-                print(f"Ошибка загрузки {filename}: {e}")
-            return default or {}
-    
-    async def save_json(self, filename, data):
-        filepath = os.path.join(Config.DATA_DIR, filename)
-        async with self.locks[filename.split('.')[0]]:
-            try:
-                os.makedirs(os.path.dirname(filepath), exist_ok=True)
-                with open(filepath, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, ensure_ascii=False, indent=4)
-                return True
-            except Exception as e:
-                print(f"Ошибка сохранения {filename}: {e}")
-                return False
+DATA_DIR = '/app/shared' if os.path.exists('/app/shared') else '.'
 
-db = Database()
+file_locks = {
+    'users': asyncio.Lock(),
+    'promocodes': asyncio.Lock(),
+    'inventory': asyncio.Lock(),
+    'settings': asyncio.Lock(),
+    'business': asyncio.Lock()
+}
+
+USERS_FILE = os.path.join(DATA_DIR, 'users_data.json')
+PROMOCODES_FILE = os.path.join(DATA_DIR, 'promocodes.json')
+INVENTORY_FILE = os.path.join(DATA_DIR, 'inventory.json')
+SETTINGS_FILE = os.path.join(DATA_DIR, 'settings.json')
+BUSINESS_FILE = os.path.join(DATA_DIR, 'business.json')
 
 async def load_users():
-    return await db.load_json('users_data.json', {})
+    async with file_locks['users']:
+        try:
+            if os.path.exists(USERS_FILE):
+                with open(USERS_FILE, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Ошибка загрузки users: {e}")
+        return {}
 
-async def save_users(data):
-    return await db.save_json('users_data.json', data)
+async def save_users(users):
+    async with file_locks['users']:
+        try:
+            os.makedirs(os.path.dirname(USERS_FILE), exist_ok=True)
+            with open(USERS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(users, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            print(f"Ошибка сохранения users: {e}")
 
 async def load_promocodes():
-    return await db.load_json('promocodes.json', {})
+    async with file_locks['promocodes']:
+        try:
+            if os.path.exists(PROMOCODES_FILE):
+                with open(PROMOCODES_FILE, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Ошибка загрузки promocodes: {e}")
+        return {}
 
-async def save_promocodes(data):
-    return await db.save_json('promocodes.json', data)
+async def save_promocodes(promocodes):
+    async with file_locks['promocodes']:
+        try:
+            os.makedirs(os.path.dirname(PROMOCODES_FILE), exist_ok=True)
+            with open(PROMOCODES_FILE, 'w', encoding='utf-8') as f:
+                json.dump(promocodes, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            print(f"Ошибка сохранения promocodes: {e}")
 
 async def load_inventory():
-    return await db.load_json('inventory.json', {})
+    async with file_locks['inventory']:
+        try:
+            if os.path.exists(INVENTORY_FILE):
+                with open(INVENTORY_FILE, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Ошибка загрузки inventory: {e}")
+        return {}
 
-async def save_inventory(data):
-    return await db.save_json('inventory.json', data)
+async def save_inventory(inventory):
+    async with file_locks['inventory']:
+        try:
+            os.makedirs(os.path.dirname(INVENTORY_FILE), exist_ok=True)
+            with open(INVENTORY_FILE, 'w', encoding='utf-8') as f:
+                json.dump(inventory, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            print(f"Ошибка сохранения inventory: {e}")
 
 async def load_settings():
-    return await db.load_json('settings.json', {"bot_enabled": True, "promo_auto": False})
+    async with file_locks['settings']:
+        try:
+            if os.path.exists(SETTINGS_FILE):
+                with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Ошибка загрузки settings: {e}")
+        return {"bot_enabled": True, "promo_auto": False}
 
-async def save_settings(data):
-    return await db.save_json('settings.json', data)
+async def save_settings(settings):
+    async with file_locks['settings']:
+        try:
+            os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
+            with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(settings, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            print(f"Ошибка сохранения settings: {e}")
 
 async def load_business():
-    return await db.load_json('business.json', {})
+    async with file_locks['business']:
+        try:
+            if os.path.exists(BUSINESS_FILE):
+                with open(BUSINESS_FILE, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"Ошибка загрузки business: {e}")
+        return {}
 
-async def save_business(data):
-    return await db.save_json('business.json', data)
+async def save_business(business):
+    async with file_locks['business']:
+        try:
+            os.makedirs(os.path.dirname(BUSINESS_FILE), exist_ok=True)
+            with open(BUSINESS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(business, f, ensure_ascii=False, indent=4)
+        except Exception as e:
+            print(f"Ошибка сохранения business: {e}")
