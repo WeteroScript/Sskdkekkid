@@ -1,12 +1,54 @@
 import json
 import os
 import asyncio
+from datetime import datetime
 from config import (
     USERS_FILE, PROMOCODES_FILE, INVENTORY_FILE, 
     SETTINGS_FILE, BUSINESS_FILE, file_locks, logger
 )
-from utils.helpers import get_default_user
 
+# ========== ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ДЕФОЛТНОГО ПОЛЬЗОВАТЕЛЯ ==========
+def get_default_user():
+    return {
+        "money": 1000000,
+        "brcoins": 1000,
+        "energy": 100,
+        "total_earned": 0,
+        "trades_count": 0,
+        "role": "user",
+        "donate_spent": 0,
+        "donate_received": 0,
+        "inventory": [],
+        "mine_attempts": 100,
+        "last_mine_reset": datetime.now().isoformat(),
+        "portfolio": {
+            "BTC": 0,
+            "WETcoin": 0,
+            "NotCoin": 0
+        },
+        "business": {
+            "auto_mine": {"owned": False, "last_collect": None, "auto_collect": False},
+            "tech_center": {"owned": False, "last_collect": None, "auto_collect": False},
+            "tire_center": {"owned": False, "last_collect": None, "auto_collect": False},
+            "styling_center": {"owned": False, "last_collect": None, "auto_collect": False},
+            "shop_24": {"owned": False, "last_collect": None, "auto_collect": False}
+        },
+        "farm": {
+            "milk": 0,
+            "hay": 0,
+            "eggs": 0,
+            "wheat": 0,
+            "meat": 0,
+            "last_collect": None
+        },
+        "casino": {
+            "bet": 0,
+            "mines_count": 4,
+            "field_size": 5
+        }
+    }
+
+# ========== РАБОТА С USERS ==========
 async def load_users():
     async with file_locks['users']:
         try:
@@ -26,6 +68,7 @@ async def save_users(users):
         except Exception as e:
             logger.error(f"Ошибка при сохранении users: {e}")
 
+# ========== РАБОТА С PROMOCODES ==========
 async def load_promocodes():
     async with file_locks['promocodes']:
         try:
@@ -45,6 +88,7 @@ async def save_promocodes(promocodes):
         except Exception as e:
             logger.error(f"Ошибка при сохранении promocodes: {e}")
 
+# ========== РАБОТА С INVENTORY ==========
 async def load_inventory():
     async with file_locks['inventory']:
         try:
@@ -64,6 +108,7 @@ async def save_inventory(inventory):
         except Exception as e:
             logger.error(f"Ошибка при сохранении inventory: {e}")
 
+# ========== РАБОТА С SETTINGS ==========
 async def load_settings():
     async with file_locks['settings']:
         try:
@@ -88,6 +133,7 @@ async def save_settings(settings):
         except Exception as e:
             logger.error(f"Ошибка при сохранении settings: {e}")
 
+# ========== РАБОТА С BUSINESS ==========
 async def load_business():
     async with file_locks['business']:
         try:
