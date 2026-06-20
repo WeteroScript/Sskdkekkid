@@ -4,8 +4,7 @@ import sys
 from config import bot, dp, logger, ADMIN_IDS
 from database.file_manager import load_settings
 from services.tasks import (
-    promo_auto_loop, check_business_loop, 
-    update_auction, auction_loop, check_auction_bids
+    promo_auto_loop, check_business_loop
 )
 from core.handlers import register_handlers
 
@@ -26,15 +25,6 @@ async def main():
         business_running = True
         business_check_task = asyncio.create_task(check_business_loop())
         logger.info("🏢 Цикл проверки бизнесов запущен!")
-        
-        auction_task = asyncio.create_task(auction_loop())
-        logger.info("🔨 Цикл аукциона запущен!")
-        
-        bid_check_task = asyncio.create_task(check_auction_bids())
-        logger.info("💰 Проверка ставок аукциона запущена!")
-        
-        await update_auction()
-        logger.info("🔄 Аукцион обновлен!")
         
         settings = await load_settings()
         
