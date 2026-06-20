@@ -2,7 +2,7 @@ import random
 import string
 from datetime import datetime
 from config import ADMIN_IDS, CHANNEL_ID, logger, bot, file_locks
-from database.file_manager import load_users, load_settings, save_settings
+from database.file_manager import load_users, load_settings, save_settings, load_disabled_functions
 
 async def is_admin(user_id):
     return user_id in ADMIN_IDS
@@ -18,6 +18,11 @@ async def check_subscription(user_id):
     except Exception as e:
         logger.warning(f"Ошибка проверки подписки: {e}")
         return False
+
+async def is_function_disabled(function_id):
+    """Проверяет, отключена ли функция"""
+    disabled = await load_disabled_functions()
+    return function_id in disabled.get("functions", [])
 
 async def check_access(message_or_callback):
     user_id = message_or_callback.from_user.id
@@ -94,5 +99,6 @@ def get_default_user():
             "bet": 0,
             "mines_count": 4,
             "field_size": 5
-        }
-}
+        },
+        "banned": False
+    }
