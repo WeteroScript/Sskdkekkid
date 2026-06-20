@@ -123,21 +123,18 @@ async def auction_loop():
             await update_auction()
         except Exception as e:
             logger.error(f"❌ Ошибка в цикле аукциона: {e}")
-        await asyncio.sleep(1800)  # 30 минут
+        await asyncio.sleep(1800)
 
 async def update_auction():
     """Обновляет список машин на аукционе"""
     try:
         auction = await load_auction()
         
-        # Выбираем 15 машин случайным образом
         all_cars = list(AUCTION_CARS.keys())
         selected_cars = []
         
-        # Выбираем по шансам
         available_cars = all_cars.copy()
         for _ in range(min(15, len(available_cars))):
-            # Выбираем машину с учетом шанса
             total_chance = sum(AUCTION_CARS[car]["chance"] for car in available_cars)
             roll = random.random() * total_chance
             cumulative = 0
@@ -153,11 +150,9 @@ async def update_auction():
                 selected_cars.append(selected)
                 available_cars.remove(selected)
         
-        # Формируем лоты
         lots = []
         for i, car_name in enumerate(selected_cars):
             car_data = AUCTION_CARS[car_name]
-            # Стартовая ставка - 50% от базовой цены
             start_price = int(car_data["base_price"] * 0.5)
             lots.append({
                 "id": f"lot_{i+1}",
@@ -168,7 +163,7 @@ async def update_auction():
                 "start_price": start_price,
                 "current_bid": start_price,
                 "highest_bidder": None,
-                "time_left": 15,  # 15 минут
+                "time_left": 15,
                 "active": True
             })
         
@@ -193,12 +188,9 @@ async def check_auction_bids():
                 if not lot.get("active", True):
                     continue
                 
-                # Уменьшаем время
                 lot["time_left"] -= 1
                 
-                # Если время вышло и есть ставка
                 if lot["time_left"] <= 0 and lot.get("highest_bidder"):
-                    # Добавляем машину победителю
                     bidder_id = lot["highest_bidder"]
                     if bidder_id in users:
                         if "inventory" not in users[bidder_id]:
@@ -210,11 +202,9 @@ async def check_auction_bids():
                             "from_auction": True
                         })
                         
-                        # Списываем деньги
                         users[bidder_id]["money"] -= lot["current_bid"]
                         await save_users(users)
                         
-                        # Отправляем уведомление
                         try:
                             await bot.send_message(
                                 int(bidder_id),
@@ -235,4 +225,4 @@ async def check_auction_bids():
         except Exception as e:
             logger.error(f"❌ Ошибка в check_auction_bids: {e}")
         
-        await asyncio.sleep(60)  # Проверяем каждую минуту
+        await asyncio.sleep(60)
