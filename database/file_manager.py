@@ -184,7 +184,7 @@ async def load_disabled_functions():
                     return json.load(f)
         except Exception as e:
             logger.error(f"Ошибка при загрузке disabled_functions: {e}")
-        return {}
+        return {"functions": []}
 
 async def save_disabled_functions(disabled):
     async with file_locks['disabled_functions']:
