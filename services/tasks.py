@@ -46,6 +46,7 @@ async def generate_and_send_promo():
             "type": promo_type,
             "uses": uses,
             "used": 0,
+            "used_by": [],  # ← ДОБАВЛЕНО!
             "amount": amount
         }
         await save_promocodes(promocodes)
@@ -117,15 +118,9 @@ async def collect_business_for_user(user_id, biz_key, config, data, business, in
                 logger.warning(f"Не удалось отправить уведомление {user_id}: {e}")
         
         elif config.get("profit_type") == "resources":
-            # Защита: проверяем что inventory - словарь
-            if not isinstance(inventory, dict):
-                logger.error(f"❌ inventory не является словарём: {type(inventory)}")
-                return False, False, False
-            
             if user_id not in inventory:
                 inventory[user_id] = []
             
-            # Защита: проверяем что у пользователя список
             if not isinstance(inventory[user_id], list):
                 logger.warning(f"⚠️ Инвентарь пользователя {user_id} не список, создаём новый")
                 inventory[user_id] = []
@@ -189,11 +184,9 @@ async def check_business_loop():
     """Цикл автоматического сбора бизнесов"""
     global business_running
     
-    # ✅ ЛОГ ДЛЯ ОТЛАДКИ
     logger.info("🔄 CHECK BUSINESS LOOP STARTED!")
     
     while business_running:
-        # ✅ ЛОГ ДЛЯ ОТЛАДКИ
         logger.info("🔄 Business loop tick...")
         
         try:
@@ -201,7 +194,6 @@ async def check_business_loop():
             users = await load_users()
             inventory = await load_inventory()
             
-            # Защита: проверяем что загрузились данные
             if not isinstance(users, dict):
                 logger.error("❌ users не словарь, пропускаем")
                 await asyncio.sleep(10)
@@ -220,11 +212,9 @@ async def check_business_loop():
             business_updated = False
             inventory_updated = False
             
-            # ✅ ЛОГ: сколько пользователей проверяем
             logger.info(f"📊 Проверка {len(users)} пользователей...")
             
             for user_id, data in users.items():
-                # Защита: проверяем data
                 if not isinstance(data, dict):
                     continue
                 
@@ -233,7 +223,6 @@ async def check_business_loop():
                     continue
                 
                 for biz_key, biz_data in user_business.items():
-                    # Защита: проверяем biz_data
                     if not isinstance(biz_data, dict):
                         continue
                     
@@ -246,7 +235,6 @@ async def check_business_loop():
                         
                         last_collect = biz_data.get("last_collect")
                         
-                        # Если last_collect нет - собираем сразу!
                         if not last_collect:
                             logger.info(f"🆕 Новый бизнес {biz_key} у {user_id}, собираем сразу")
                             biz_data["last_collect"] = datetime.now().isoformat()
@@ -273,7 +261,6 @@ async def check_business_loop():
                             logger.error(f"❌ Неверный формат last_collect у {user_id}: {last_collect}")
                             continue
             
-            # Сохраняем все изменения
             if users_updated:
                 await save_users(users)
                 logger.info("💾 Сохранены изменения пользователей")
