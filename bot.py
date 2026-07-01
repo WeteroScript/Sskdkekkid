@@ -14,7 +14,8 @@ from handlers import (
     register_business_handlers,
     register_casino_handlers,
     register_jobs_handlers,
-    register_auction_handlers
+    register_auction_handlers,
+    register_fishing_handlers
 )
 
 async def main():
@@ -24,16 +25,22 @@ async def main():
     # ==========================================
     # ===== РЕГИСТРАЦИЯ ОБРАБОТЧИКОВ =====
     # ==========================================
-    register_auction_handlers(dp)
-    register_jobs_handlers(dp)
-    register_casino_handlers(dp)
-    register_user_handlers(dp)
+    # СНАЧАЛА СПЕЦИФИЧНЫЕ (С ПРОВЕРКОЙ STATE)
+    register_auction_handlers(dp)   # Ставки на аукцион
+    register_jobs_handlers(dp)      # Трейдинг
+    register_casino_handlers(dp)    # Казино
+    register_fishing_handlers(dp)   # Рыбалка
+    
+    # ПОТОМ ОБЩИЕ
+    register_user_handlers(dp)      # Промокоды и поддержка (ПОСЛЕДНИЙ!)
+    
+    # АДМИНКА И БИЗНЕС (CALLBACK'И)
     register_admin_handlers(dp)
     register_business_handlers(dp)
     
     try:
         # ==========================================
-        # ===== ЗАПУСК БИЗНЕС-ЦИКЛА (АВТО-СБОР) =====
+        # ===== ЗАПУСК БИЗНЕС-ЦИКЛА =====
         # ==========================================
         tasks.business_running = True
         tasks.business_check_task = asyncio.create_task(tasks.check_business_loop())
@@ -42,11 +49,10 @@ async def main():
         # ==========================================
         # ===== ЗАПУСК ЦИКЛА АУКЦИОНА =====
         # ==========================================
-        auction.auction_running = True  # ← ПРАВИЛЬНО!
-        auction.auction_update_task = asyncio.create_task(auction.auction_update_loop())  # ← ПРАВИЛЬНО!
+        auction.auction_running = True
+        auction.auction_update_task = asyncio.create_task(auction.auction_update_loop())
         logger.info("🚗 Цикл обновления аукциона запущен!")
         
-        # Инициализируем аукцион
         await auction.update_auction_lots()
         logger.info("🚗 Аукцион инициализирован!")
         
@@ -59,9 +65,6 @@ async def main():
             tasks.promo_task = asyncio.create_task(tasks.promo_auto_loop())
             logger.info("📢 Авто-промокоды запущены!")
         
-        # ==========================================
-        # ===== ЗАПУСК БОТА =====
-        # ==========================================
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
         
     except KeyboardInterrupt:
