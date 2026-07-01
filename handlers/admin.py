@@ -11,13 +11,14 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BufferedIn
 from config import (
     ADMIN_IDS, bot, logger, BUSINESS_CONFIG, AUCTION_CARS,
     USERS_FILE, PROMOCODES_FILE, SETTINGS_FILE, BUSINESS_FILE, AUCTION_FILE,
-    AUCTION_CONFIG
+    AUCTION_CONFIG, CARS_FILE
 )
 from database.file_manager import (
     load_users, save_users, load_business, save_business,
     load_settings, save_settings, load_promocodes, save_promocodes,
     load_disabled_functions, save_disabled_functions,
-    load_auction_data, save_auction_data
+    load_auction_data, save_auction_data,
+    add_user_car, get_user_cars
 )
 from utils.helpers import is_admin, get_default_user, get_stars_display
 from services.currency import currency_rates
@@ -35,8 +36,8 @@ def register_admin_handlers(dp):
         help_text = (
             "👑 **Админ-команды:**\n\n"
             "**👤 Игроки:**\n"
-            "`/getplayeracc @username` - меню игрока\n"
-            "`/givecar @username кол-во id_машины` - выдача машины\n\n"
+            "`/getplayeracc @username или ID` - меню игрока\n"
+            "`/givecar @username или ID кол-во id_машины` - выдача машины\n\n"
             "**🏢 Бизнес:**\n"
             "`/resetbusiness @username (причина)` - сброс бизнеса\n"
             "`/resetallbusiness` - сброс всех бизнесов\n"
@@ -48,8 +49,8 @@ def register_admin_handlers(dp):
             "`styling_center` - Стайлинг\n"
             "`shop_24` - Магазин 24/7\n\n"
             "**💰 Выдача валют:**\n"
-            "`/giverub @username кол-во (сообщение)` - выдача рублей\n"
-            "`/givedonate @username кол-во (сообщение)` - выдача BRcoins\n\n"
+            "`/giverub @username или ID кол-во (сообщение)` - выдача рублей\n"
+            "`/givedonate @username или ID кол-во (сообщение)` - выдача BRcoins\n\n"
             "**🎰 Управление:**\n"
             "`/promostart on/off` - авто-промокоды\n"
             "`/promostatus` - статус промокодов\n"
@@ -71,6 +72,10 @@ def register_admin_handlers(dp):
         )
         await message.answer(help_text, parse_mode="Markdown")
 
+    # ==========================================
+    # ===== /CARLIST — ВСЕ 125 МАШИН =====
+    # ==========================================
+    
     @dp.message(Command("carlist"))
     async def car_list(message: types.Message):
         """Список всех машин с ID для админов"""
@@ -90,88 +95,147 @@ def register_admin_handlers(dp):
                 text += f"   {stars} ({data['rarity']})\n"
                 text += f"   💰 {data['base_price']:,.0f}₽\n\n"
             
-            if len(text) > 4000:
-                parts = [text[i:i+4000] for i in range(0, len(text), 4000)]
-                for part in parts:
-                    await message.answer(part, parse_mode="Markdown")
-            else:
-                await message.answer(text, parse_mode="Markdown")
+            await message.answer(text, parse_mode="Markdown")
                 
         except Exception as e:
             logger.error(f"Ошибка в carlist: {e}")
             await message.answer(f"❌ Ошибка: {e}")
 
-    @dp.message(Command("setcarauction"))
-    async def set_car_auction(message: types.Message):
-        """Добавить машину на аукцион в конкретный слот"""
+    # ==========================================
+    # ===== /GETDB — ДОБАВЛЯЕМ CARS.JSON =====
+    # ==========================================
+    
+    @dp.message(Command("getdb"))
+    async def get_db(message: types.Message):
         if not await is_admin(message.from_user.id):
             await message.answer("⛔ У вас нет прав!")
             return
         
-        parts = message.text.split(maxsplit=4)
-        if len(parts) < 5:
-            await message.answer(
-                "❌ Использование: /setcarauction (id машины) (начальная ставка) (кол-во) (слот 1-15)\n\n"
-                "Пример: /setcarauction \"Монстр трак\" 1000000 1 3\n"
-                "Для просмотра всех машин используйте /carlist\n"
-                "Слоты: 1-15 (если слот занят, машина заменит существующую)"
-            )
+        try:
+            await message.answer("📦 Собираю базу...")
+            files_sent = 0
+            
+            for file in [USERS_FILE, PROMOCODES_FILE, SETTINGS_FILE, BUSINESS_FILE, AUCTION_FILE, CARS_FILE]:
+                if os.path.exists(file):
+                    with open(file, 'r', encoding='utf-8') as f:
+                        await message.answer_document(
+                            BufferedInputFile(
+                                f.read().encode('utf-8'),
+                                filename=os.path.basename(file)
+                            )
+                        )
+                        files_sent += 1
+                        await asyncio.sleep(0.3)
+            await message.answer(f"✅ Отправлено {files_sent} файлов!")
+        except Exception as e:
+            logger.error(f"Ошибка в get_db: {e}")
+            await message.answer(f"❌ Ошибка: {e}")
+
+    # ==========================================
+    # ===== /GIVECAR — ПО ID ИЛИ @USERNAME =====
+    # ==========================================
+    
+    @dp.message(Command("givecar"))
+    async def give_car(message: types.Message):
+        if not await is_admin(message.from_user.id):
+            await message.answer("⛔ У вас нет прав!")
+            return
+        
+        parts = message.text.split(maxsplit=3)
+        if len(parts) < 4:
+            await message.answer("❌ Использование: /givecar @username или ID кол-во id_машины\n\nПример: /givecar @user 1 car_1\n/givecar 123456789 1 car_1\nДля просмотра всех ID используйте /carlist")
             return
         
         try:
-            car_name = parts[1].strip()
-            start_bid = int(parts[2])
-            count = int(parts[3])
-            slot = int(parts[4])
+            target = parts[1].strip()
+            amount = int(parts[2])
+            car_id = parts[3].lower()
             
-            if count <= 0 or start_bid <= 0:
-                await message.answer("❌ Количество и ставка должны быть положительными!")
+            if amount <= 0:
+                await message.answer("❌ Количество должно быть положительным!")
                 return
             
-            if slot < 1 or slot > AUCTION_CONFIG["max_lots"]:
-                await message.answer(f"❌ Слот должен быть от 1 до {AUCTION_CONFIG['max_lots']}!")
-                return
+            # Находим пользователя по ID или username
+            users = await load_users()
+            found_user_id = None
             
-            if car_name not in AUCTION_CARS:
-                found = None
-                for name in AUCTION_CARS.keys():
-                    if car_name.lower() in name.lower():
-                        found = name
-                        break
-                
-                if found:
-                    car_name = found
+            if target.isdigit():
+                if target in users:
+                    found_user_id = target
                 else:
-                    await message.answer(
-                        f"❌ Машина '{car_name}' не найдена!\n"
-                        f"Используйте /carlist для просмотра всех машин"
-                    )
+                    await message.answer(f"❌ Пользователь с ID {target} не найден!")
+                    return
+            else:
+                username = target.replace("@", "").lower()
+                for user_id, data in users.items():
+                    try:
+                        user = await bot.get_chat(int(user_id))
+                        if user.username and user.username.lower() == username:
+                            found_user_id = user_id
+                            break
+                    except:
+                        continue
+                
+                if not found_user_id:
+                    await message.answer(f"❌ Пользователь @{username} не найден!")
                     return
             
-            success, msg = await set_admin_auction_lots_with_slot(car_name, start_bid, count, slot)
-            await message.answer(msg)
+            # Находим машину
+            car_name = None
+            car_list = list(AUCTION_CARS.keys())
             
+            if car_id.startswith("car_"):
+                try:
+                    index = int(car_id.replace("car_", "")) - 1
+                    if 0 <= index < len(car_list):
+                        car_name = car_list[index]
+                except ValueError:
+                    pass
+            
+            if not car_name:
+                for name in car_list:
+                    if car_id in name.lower():
+                        car_name = name
+                        break
+            
+            if not car_name:
+                await message.answer(f"❌ Машина '{car_id}' не найдена!\nИспользуйте /carlist для списка")
+                return
+            
+            car_price = AUCTION_CARS.get(car_name, {}).get("base_price", 0)
+            
+            for _ in range(amount):
+                await add_user_car(found_user_id, {
+                    "name": car_name,
+                    "price": car_price,
+                    "from_admin": True
+                })
+            
+            try:
+                user = await bot.get_chat(int(found_user_id))
+                display_name = f"@{user.username}" if user.username else f"ID {found_user_id}"
+            except:
+                display_name = f"ID {found_user_id}"
+            
+            await message.answer(f"✅ {display_name} получил {amount} шт. {car_name}!")
+            try:
+                await bot.send_message(
+                    int(found_user_id),
+                    f"🎁 Вы получили {amount} шт. {car_name} от администратора!"
+                )
+            except:
+                pass
+                
         except ValueError:
-            await message.answer("❌ Введите корректные числа для ставки, количества и слота!")
+            await message.answer("❌ Введите корректное число!")
         except Exception as e:
-            logger.error(f"Ошибка в setcarauction: {e}")
+            logger.error(f"Ошибка в givecar: {e}")
             await message.answer(f"❌ Ошибка: {e}")
 
-    @dp.message(Command("refreshauction"))
-    async def refresh_auction(message: types.Message):
-        """Обновить аукцион для всех пользователей"""
-        if not await is_admin(message.from_user.id):
-            await message.answer("⛔ У вас нет прав!")
-            return
-        
-        try:
-            await message.answer("🔄 Обновляю аукцион...")
-            success, msg = await refresh_auction_for_all()
-            await message.answer(msg)
-        except Exception as e:
-            logger.error(f"Ошибка в refreshauction: {e}")
-            await message.answer(f"❌ Ошибка: {e}")
-
+    # ==========================================
+    # ===== /GETPLAYERACC — ПО ID ИЛИ @USERNAME =====
+    # ==========================================
+    
     @dp.message(Command("getplayeracc"))
     async def get_player_acc(message: types.Message):
         if not await is_admin(message.from_user.id):
@@ -180,32 +244,44 @@ def register_admin_handlers(dp):
         
         parts = message.text.split()
         if len(parts) < 2:
-            await message.answer("❌ Использование: /getplayeracc @username")
+            await message.answer("❌ Использование: /getplayeracc @username или ID")
             return
         
-        username = parts[1].replace("@", "").lower()
+        target = parts[1].strip()
         
         try:
             users = await load_users()
             found_user = None
             found_id = None
             
-            for user_id, data in users.items():
-                try:
-                    user = await bot.get_chat(int(user_id))
-                    if user.username and user.username.lower() == username:
-                        found_user = data
-                        found_id = user_id
-                        break
-                except:
-                    continue
+            if target.isdigit():
+                if target in users:
+                    found_id = target
+                    found_user = users[target]
+                else:
+                    await message.answer(f"❌ Пользователь с ID {target} не найден!")
+                    return
+            else:
+                username = target.replace("@", "").lower()
+                for user_id, data in users.items():
+                    try:
+                        user = await bot.get_chat(int(user_id))
+                        if user.username and user.username.lower() == username:
+                            found_user = data
+                            found_id = user_id
+                            break
+                    except:
+                        continue
+                
+                if not found_user:
+                    await message.answer(f"❌ Пользователь @{username} не найден!")
+                    return
             
-            if not found_user:
-                await message.answer(f"❌ Пользователь @{username} не найден!")
-                return
+            cars = await get_user_cars(found_id)
             
             text = (
-                f"👤 **ПРОФИЛЬ @{username}**\n\n"
+                f"👤 **ПРОФИЛЬ**\n\n"
+                f"🆔 ID: {found_id}\n"
                 f"💰 Баланс: {found_user['money']:,.0f}₽\n"
                 f"🔒 Заморожено: {found_user.get('frozen_balance', 0):,.0f}₽\n"
                 f"💎 BRcoins: {found_user['brcoins']}\n"
@@ -216,7 +292,7 @@ def register_admin_handlers(dp):
                 f"₿ BTC: {found_user['portfolio'].get('BTC', 0)}\n"
                 f"💧 WETcoin: {found_user['portfolio'].get('WETcoin', 0)}\n"
                 f"🪙 NotCoin: {found_user['portfolio'].get('NotCoin', 0)}\n\n"
-                f"🚗 Машин в гараже: {len(found_user.get('inventory', []))}"
+                f"🚗 Машин в гараже: {len(cars)}"
             )
             
             keyboard = [
@@ -236,6 +312,10 @@ def register_admin_handlers(dp):
             logger.error(f"Ошибка в getplayeracc: {e}")
             await message.answer(f"❌ Ошибка: {e}")
 
+    # ==========================================
+    # ===== ВСЕ CALLBACK'И =====
+    # ==========================================
+    
     @dp.callback_query(F.data.startswith("admin_reset_money_"))
     async def admin_reset_money(callback: types.CallbackQuery):
         if not await is_admin(callback.from_user.id):
@@ -338,22 +418,14 @@ def register_admin_handlers(dp):
         
         user_id = callback.data.replace("admin_garage_", "")
         try:
-            users = await load_users()
-            if user_id not in users:
-                await callback.answer("❌ Пользователь не найден!", show_alert=True)
-                return
-            
-            inventory = users[user_id].get("inventory", [])
-            if not inventory:
+            cars = await get_user_cars(user_id)
+            if not cars:
                 await callback.answer("🚗 У игрока нет машин!", show_alert=True)
                 return
             
             text = f"🚗 **Гараж игрока:**\n\n"
-            for i, car in enumerate(inventory, 1):
-                if isinstance(car, dict):
-                    text += f"{i}. {car.get('name', 'Неизвестно')} - {car.get('price', 0):,.0f}₽\n"
-                else:
-                    text += f"{i}. {car}\n"
+            for i, car in enumerate(cars, 1):
+                text += f"{i}. {car.get('name', 'Неизвестно')} - {car.get('price', 0):,.0f}₽\n"
             
             await callback.message.edit_text(
                 text,
@@ -407,90 +479,9 @@ def register_admin_handlers(dp):
             await callback.answer("❌ Ошибка!", show_alert=True)
         await callback.answer()
 
-    @dp.message(Command("givecar"))
-    async def give_car(message: types.Message):
-        if not await is_admin(message.from_user.id):
-            await message.answer("⛔ У вас нет прав!")
-            return
-        
-        parts = message.text.split(maxsplit=3)
-        if len(parts) < 4:
-            await message.answer("❌ Использование: /givecar @username кол-во id_машины\n\nПример: /givecar @user 1 car_1\nДля просмотра всех ID используйте /carlist")
-            return
-        
-        try:
-            username = parts[1].replace("@", "").lower()
-            amount = int(parts[2])
-            car_id = parts[3].lower()
-            
-            if amount <= 0:
-                await message.answer("❌ Количество должно быть положительным!")
-                return
-            
-            car_name = None
-            car_list = list(AUCTION_CARS.keys())
-            
-            if car_id.startswith("car_"):
-                try:
-                    index = int(car_id.replace("car_", "")) - 1
-                    if 0 <= index < len(car_list):
-                        car_name = car_list[index]
-                except ValueError:
-                    pass
-            
-            if not car_name:
-                for name in car_list:
-                    if car_id in name.lower():
-                        car_name = name
-                        break
-            
-            if not car_name:
-                await message.answer(f"❌ Машина '{car_id}' не найдена!\nИспользуйте /carlist для списка")
-                return
-            
-            users = await load_users()
-            found = False
-            
-            for user_id, data in users.items():
-                try:
-                    user = await bot.get_chat(int(user_id))
-                    if user.username and user.username.lower() == username:
-                        if "inventory" not in data:
-                            data["inventory"] = []
-                        
-                        car_price = AUCTION_CARS.get(car_name, {}).get("base_price", 0)
-                        for _ in range(amount):
-                            data["inventory"].append({
-                                "name": car_name,
-                                "price": car_price,
-                                "from_admin": True
-                            })
-                        
-                        users[user_id] = data
-                        await save_users(users)
-                        
-                        await message.answer(f"✅ @{username} получил {amount} шт. {car_name}!")
-                        try:
-                            await bot.send_message(
-                                int(user_id),
-                                f"🎁 Вы получили {amount} шт. {car_name} от администратора!"
-                            )
-                        except:
-                            pass
-                        found = True
-                        break
-                except Exception as e:
-                    logger.warning(f"Ошибка при поиске пользователя: {e}")
-                    continue
-            
-            if not found:
-                await message.answer(f"❌ @{username} не найден!")
-                
-        except ValueError:
-            await message.answer("❌ Введите корректное число!")
-        except Exception as e:
-            logger.error(f"Ошибка в givecar: {e}")
-            await message.answer(f"❌ Ошибка: {e}")
+    # ==========================================
+    # ===== ОСТАЛЬНЫЕ КОМАНДЫ =====
+    # ==========================================
 
     @dp.message(Command("idfunctionlist"))
     async def id_function_list(message: types.Message):
@@ -766,11 +757,11 @@ def register_admin_handlers(dp):
         
         parts = message.text.split(maxsplit=3)
         if len(parts) < 3:
-            await message.answer("❌ Использование: /giverub @username кол-во (сообщение)")
+            await message.answer("❌ Использование: /giverub @username или ID кол-во (сообщение)")
             return
         
         try:
-            username = parts[1].replace("@", "").lower()
+            target = parts[1].strip()
             amount = int(parts[2])
             admin_message = parts[3] if len(parts) > 3 else "Без сообщения"
             
@@ -779,28 +770,45 @@ def register_admin_handlers(dp):
                 return
             
             users = await load_users()
-            found = False
+            found_user_id = None
             
-            for user_id, data in users.items():
-                try:
-                    user = await bot.get_chat(int(user_id))
-                    if user.username and user.username.lower() == username:
-                        data["money"] += amount
-                        data["total_earned"] = data.get("total_earned", 0) + amount
-                        await save_users(users)
-                        await message.answer(f"✅ @{username} +{amount:,}₽")
-                        await bot.send_message(
-                            int(user_id),
-                            f"💰 +{amount:,}₽ от админа!\n\n📝 Сообщение: {admin_message}"
-                        )
-                        found = True
-                        break
-                except Exception as e:
-                    logger.warning(f"Ошибка при поиске пользователя: {e}")
-                    continue
+            if target.isdigit():
+                if target in users:
+                    found_user_id = target
+                else:
+                    await message.answer(f"❌ Пользователь с ID {target} не найден!")
+                    return
+            else:
+                username = target.replace("@", "").lower()
+                for user_id, data in users.items():
+                    try:
+                        user = await bot.get_chat(int(user_id))
+                        if user.username and user.username.lower() == username:
+                            found_user_id = user_id
+                            break
+                    except:
+                        continue
+                
+                if not found_user_id:
+                    await message.answer(f"❌ Пользователь @{username} не найден!")
+                    return
             
-            if not found:
-                await message.answer(f"❌ @{username} не найден!")
+            users[found_user_id]["money"] += amount
+            users[found_user_id]["total_earned"] = users[found_user_id].get("total_earned", 0) + amount
+            await save_users(users)
+            
+            try:
+                user = await bot.get_chat(int(found_user_id))
+                display_name = f"@{user.username}" if user.username else f"ID {found_user_id}"
+            except:
+                display_name = f"ID {found_user_id}"
+            
+            await message.answer(f"✅ {display_name} +{amount:,}₽")
+            await bot.send_message(
+                int(found_user_id),
+                f"💰 +{amount:,}₽ от админа!\n\n📝 Сообщение: {admin_message}"
+            )
+                
         except ValueError:
             await message.answer("❌ Введите корректное число!")
         except Exception as e:
@@ -815,11 +823,11 @@ def register_admin_handlers(dp):
         
         parts = message.text.split(maxsplit=3)
         if len(parts) < 3:
-            await message.answer("❌ Использование: /givedonate @username кол-во (сообщение)")
+            await message.answer("❌ Использование: /givedonate @username или ID кол-во (сообщение)")
             return
         
         try:
-            username = parts[1].replace("@", "").lower()
+            target = parts[1].strip()
             amount = int(parts[2])
             admin_message = parts[3] if len(parts) > 3 else "Без сообщения"
             
@@ -828,28 +836,45 @@ def register_admin_handlers(dp):
                 return
             
             users = await load_users()
-            found = False
+            found_user_id = None
             
-            for user_id, data in users.items():
-                try:
-                    user = await bot.get_chat(int(user_id))
-                    if user.username and user.username.lower() == username:
-                        data["brcoins"] += amount
-                        data["donate_received"] = data.get("donate_received", 0) + amount
-                        await save_users(users)
-                        await message.answer(f"✅ @{username} +{amount} BRcoins")
-                        await bot.send_message(
-                            int(user_id),
-                            f"💎 +{amount} BRcoins от админа!\n\n📝 Сообщение: {admin_message}"
-                        )
-                        found = True
-                        break
-                except Exception as e:
-                    logger.warning(f"Ошибка при поиске пользователя: {e}")
-                    continue
+            if target.isdigit():
+                if target in users:
+                    found_user_id = target
+                else:
+                    await message.answer(f"❌ Пользователь с ID {target} не найден!")
+                    return
+            else:
+                username = target.replace("@", "").lower()
+                for user_id, data in users.items():
+                    try:
+                        user = await bot.get_chat(int(user_id))
+                        if user.username and user.username.lower() == username:
+                            found_user_id = user_id
+                            break
+                    except:
+                        continue
+                
+                if not found_user_id:
+                    await message.answer(f"❌ Пользователь @{username} не найден!")
+                    return
             
-            if not found:
-                await message.answer(f"❌ @{username} не найден!")
+            users[found_user_id]["brcoins"] += amount
+            users[found_user_id]["donate_received"] = users[found_user_id].get("donate_received", 0) + amount
+            await save_users(users)
+            
+            try:
+                user = await bot.get_chat(int(found_user_id))
+                display_name = f"@{user.username}" if user.username else f"ID {found_user_id}"
+            except:
+                display_name = f"ID {found_user_id}"
+            
+            await message.answer(f"✅ {display_name} +{amount} BRcoins")
+            await bot.send_message(
+                int(found_user_id),
+                f"💎 +{amount} BRcoins от админа!\n\n📝 Сообщение: {admin_message}"
+            )
+                
         except ValueError:
             await message.answer("❌ Введите корректное число!")
         except Exception as e:
@@ -886,7 +911,7 @@ def register_admin_handlers(dp):
                 "type": "brcoins" if promo_type == 1 else "money",
                 "uses": uses,
                 "used": 0,
-                "used_by": [],  # ← ДОБАВЛЕНО!
+                "used_by": [],
                 "amount": amount
             }
             await save_promocodes(promocodes)
@@ -928,31 +953,6 @@ def register_admin_handlers(dp):
             await message.answer(f"✅ Отправлено {sent} пользователям!")
         except Exception as e:
             logger.error(f"Ошибка в mailall: {e}")
-            await message.answer(f"❌ Ошибка: {e}")
-
-    @dp.message(Command("getdb"))
-    async def get_db(message: types.Message):
-        if not await is_admin(message.from_user.id):
-            await message.answer("⛔ У вас нет прав!")
-            return
-        
-        try:
-            await message.answer("📦 Собираю базу...")
-            files_sent = 0
-            for file in [USERS_FILE, PROMOCODES_FILE, SETTINGS_FILE, BUSINESS_FILE, AUCTION_FILE]:
-                if os.path.exists(file):
-                    with open(file, 'r', encoding='utf-8') as f:
-                        await message.answer_document(
-                            BufferedInputFile(
-                                f.read().encode('utf-8'),
-                                filename=os.path.basename(file)
-                            )
-                        )
-                        files_sent += 1
-                        await asyncio.sleep(0.3)
-            await message.answer(f"✅ Отправлено {files_sent} файлов!")
-        except Exception as e:
-            logger.error(f"Ошибка в get_db: {e}")
             await message.answer(f"❌ Ошибка: {e}")
 
     @dp.message(Command("promostart"))
