@@ -9,7 +9,7 @@ class UserModel:
         """Возвращает дефолтного пользователя"""
         return {
             "money": 1000000,
-            "brcoins": 1000,
+            "brcoins": 0,
             "energy": 100,
             "total_earned": 0,
             "trades_count": 0,
