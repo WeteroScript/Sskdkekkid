@@ -46,13 +46,31 @@ async def load_json(file_type: str, default: Any = None) -> Any:
         try:
             if os.path.exists(file_path):
                 with open(file_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    raw = f.read()
+                # Файл может быть пустым (0 байт), если запись была прервана.
+                # Пустая/повреждённая строка — не ошибка, а сигнал вернуть дефолт.
+                if not raw or not raw.strip():
+                    return default if default is not None else {}
+                try:
+                    return json.loads(raw)
+                except json.JSONDecodeError as e:
+                    logger.error(f"Повреждённый JSON в {file_type} ({file_path}): {e}. Восстанавливаем из резервной копии/дефолта.")
+                    backup_path = file_path + ".bak"
+                    if os.path.exists(backup_path):
+                        try:
+                            with open(backup_path, 'r', encoding='utf-8') as bf:
+                                backup_raw = bf.read()
+                            if backup_raw and backup_raw.strip():
+                                return json.loads(backup_raw)
+                        except Exception as be:
+                            logger.error(f"Резервная копия {file_type} тоже повреждена: {be}")
+                    return default if default is not None else {}
         except Exception as e:
             logger.error(f"Ошибка загрузки {file_type}: {e}")
-        return default or {}
+        return default if default is not None else {}
 
 async def save_json(file_type: str, data: Any):
-    """Универсальное сохранение JSON"""
+    """Универсальное сохранение JSON (атомарно, чтобы никогда не оставлять пустой/битый файл)"""
     file_path = get_file_path(file_type)
     if not file_path:
         return
@@ -60,8 +78,26 @@ async def save_json(file_type: str, data: Any):
     async with _file_locks[file_type]:
         try:
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            with open(file_path, 'w', encoding='utf-8') as f:
+
+            # Сначала сохраняем резервную копию текущего валидного файла
+            if os.path.exists(file_path):
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        current_raw = f.read()
+                    if current_raw and current_raw.strip():
+                        with open(file_path + ".bak", 'w', encoding='utf-8') as bf:
+                            bf.write(current_raw)
+                except Exception:
+                    pass
+
+            # Пишем во временный файл и атомарно переименовываем —
+            # так файл никогда не окажется пустым/недописанным на диске.
+            tmp_path = file_path + ".tmp"
+            with open(tmp_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=4)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, file_path)
         except Exception as e:
             logger.error(f"Ошибка сохранения {file_type}: {e}")
 
