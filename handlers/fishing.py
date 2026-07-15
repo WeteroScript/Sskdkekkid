@@ -3,6 +3,7 @@ from datetime import datetime
 from aiogram import types, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.exceptions import TelegramBadRequest
 
 from config import bot, logger
 from database.file_manager import load_users, save_users, load_inventory, save_inventory
